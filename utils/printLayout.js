@@ -1,4 +1,5 @@
 const sharp = require("sharp");
+const { PDFDocument } = require("pdf-lib");
 
 const { createHttpError } = require("./http");
 
@@ -243,101 +244,37 @@ function buildBusinessCutMarksSvg(layout, dimensions, dpi) {
 </svg>`;
 }
 
-function buildSimpleJpegPdf(pages, dimensions) {
-    const pageWidthPt = Math.round(dimensions.width * 72);
-    const pageHeightPt = Math.round(dimensions.height * 72);
-    const pageEntries = pages.map(function (_page, index) {
-        const imageId = 3 + index * 3;
-        return {
-            imageId: imageId,
-            contentId: imageId + 1,
-            pageId: imageId + 2
-        };
-    });
+async function buildLayoutPdfBuffer(pages, dimensions) {
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.setTitle("AJ Print Layout Pro export");
+    pdfDoc.setAuthor("AJartivo");
+    pdfDoc.setProducer("AJartivo Print Layout Backend");
+    pdfDoc.setCreator("AJartivo Print Layout Backend");
+    pdfDoc.setSubject("Print layout export");
 
-    const objects = [];
-    objects.push(buildPdfObject(1, `<< /Type /Catalog /Pages 2 0 R >>`));
-    objects.push(buildPdfObject(2, `<< /Type /Pages /Count ${pages.length} /Kids [${pageEntries.map(function (entry) { return `${entry.pageId} 0 R`; }).join(" ")}] >>`));
+    const widthIn = Number(dimensions && dimensions.width) || 1;
+    const heightIn = Number(dimensions && dimensions.height) || 1;
+    const width = Math.max(1, widthIn * 72);
+    const height = Math.max(1, heightIn * 72);
 
-    pages.forEach(function (page, index) {
-        const entry = pageEntries[index];
-        objects.push(buildPdfImageObject(entry.imageId, page.jpegBuffer, page.imageWidth, page.imageHeight));
-        objects.push(buildPdfObject(entry.contentId, buildPdfPageContentObject(pageWidthPt, pageHeightPt, entry.imageId)));
-        objects.push(buildPdfObject(entry.pageId, buildPdfPageObject(pageWidthPt, pageHeightPt, entry.contentId, entry.imageId)));
-    });
+    for (let i = 0; i < pages.length; i += 1) {
+        const page = pages[i];
+        if (!page || !Buffer.isBuffer(page.jpegBuffer) || !page.jpegBuffer.length) {
+            continue;
+        }
 
-    const bodyParts = [Buffer.from("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n", "binary")];
-    const offsets = [0];
-    let currentOffset = bodyParts[0].length;
-
-    objects.forEach(function (object) {
-        offsets.push(currentOffset);
-        bodyParts.push(object);
-        currentOffset += object.length;
-    });
-
-    const xrefOffset = currentOffset;
-    const xrefLines = [
-        "xref",
-        `0 ${objects.length + 1}`,
-        "0000000000 65535 f "
-    ];
-    for (let i = 1; i < offsets.length; i += 1) {
-        xrefLines.push(`${String(offsets[i]).padStart(10, "0")} 00000 n `);
+        const embedded = await pdfDoc.embedJpg(page.jpegBuffer);
+        const pdfPage = pdfDoc.addPage([width, height]);
+        pdfPage.drawImage(embedded, {
+            x: 0,
+            y: 0,
+            width: width,
+            height: height
+        });
     }
-    const trailer = [
-        "trailer",
-        `<< /Size ${objects.length + 1} /Root 1 0 R >>`,
-        "startxref",
-        String(xrefOffset),
-        "%%EOF"
-    ].join("\n");
 
-    bodyParts.push(Buffer.from(xrefLines.join("\n") + "\n" + trailer, "utf8"));
-    return Buffer.concat(bodyParts);
-}
-
-function buildPdfObject(objectId, body) {
-    return Buffer.from(`${objectId} 0 obj\n${body}\nendobj\n`, "utf8");
-}
-
-function buildPdfImageObject(objectId, jpegBuffer, width, height) {
-    const header = Buffer.from([
-        `${objectId} 0 obj`,
-        `<< /Type /XObject`,
-        `/Subtype /Image`,
-        `/Width ${width}`,
-        `/Height ${height}`,
-        `/ColorSpace /DeviceRGB`,
-        `/BitsPerComponent 8`,
-        `/Filter /DCTDecode`,
-        `/Length ${jpegBuffer.length} >>`,
-        "stream"
-    ].join("\n") + "\n", "utf8");
-    const footer = Buffer.from("\nendstream\nendobj\n", "utf8");
-    return Buffer.concat([header, jpegBuffer, footer]);
-}
-
-function buildPdfPageContentObject(pageWidthPt, pageHeightPt, imageObjectId) {
-    return [
-        `<< /Length ${Buffer.byteLength(`q\n${pageWidthPt} 0 0 ${pageHeightPt} 0 0 cm\n/Im${imageObjectId} Do\nQ`, "utf8")} >>`,
-        "stream",
-        "q",
-        `${pageWidthPt} 0 0 ${pageHeightPt} 0 0 cm`,
-        `/Im${imageObjectId} Do`,
-        "Q",
-        "endstream"
-    ].join("\n");
-}
-
-function buildPdfPageObject(pageWidthPt, pageHeightPt, contentId, imageId) {
-    return [
-        `<< /Type /Page`,
-        `/Parent 2 0 R`,
-        `/MediaBox [0 0 ${pageWidthPt} ${pageHeightPt}]`,
-        `/Resources << /ProcSet [/PDF /ImageC] /XObject << /Im${imageId} ${imageId} 0 R >> >>`,
-        `/Contents ${contentId} 0 R >>`
-    ].join(" ");
+    const bytes = await pdfDoc.save({ useObjectStreams: false });
+    return Buffer.from(bytes);
 }
 
 function normalizeNumber(value, fallback, min, max) {
@@ -387,5 +324,5 @@ module.exports = {
     getSheetDimensions,
     createBusinessCardPreviewBuffer,
     createBusinessCardSheetBuffer,
-    buildSimpleJpegPdf
+    buildLayoutPdfBuffer
 };

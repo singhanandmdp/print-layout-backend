@@ -1,11 +1,10 @@
 const express = require("express");
-const sharp = require("sharp");
+const multer = require("multer");
 
 const { config, cleanText } = require("../config");
-const { parseMultipartRequest } = require("../utils/multipart");
 const { asyncHandler, createHttpError } = require("../utils/http");
 const {
-    buildSimpleJpegPdf,
+    buildLayoutPdfBuffer,
     createBusinessCardPreviewBuffer,
     createBusinessCardSheetBuffer,
     getSheetDimensions,
@@ -14,39 +13,38 @@ const {
 
 const router = express.Router();
 
-const rawUploadParser = express.raw({
-    type: function () {
-        return true;
-    },
-    limit: config.uploads.maxFileSizeBytes
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: config.uploads.maxFileSizeBytes,
+        files: 4
+    }
 });
 
-router.post("/tools/aj-print-layout-pro/preview", rawUploadParser, asyncHandler(async function (req, res) {
-    const multipart = parseMultipartRequest(req);
-    const file = multipart.files && multipart.files.file;
+router.post("/tools/aj-print-layout-pro/preview", upload.single("file"), asyncHandler(async function (req, res) {
+    const file = req.file;
 
     if (!file || !Buffer.isBuffer(file.buffer) || !file.buffer.length) {
         throw createHttpError(400, "File data is missing.");
     }
 
-    if (!isSupportedPreviewFile(file.fileName || "")) {
+    if (!isSupportedPreviewFile(file.originalname || "")) {
         throw createHttpError(400, "Preview supports JPG, PNG, WEBP, AVIF, GIF, BMP, HEIC, HEIF, TIF, and TIFF files.");
     }
 
     const previewBuffer = await createBusinessCardPreviewBuffer(file.buffer);
     res.set("Content-Type", "image/jpeg");
-    res.set("Content-Disposition", `inline; filename="${cleanFileName(file.fileName || "preview.jpg")}"`);
+    res.set("Content-Disposition", `inline; filename="${cleanFileName(file.originalname || "preview.jpg")}"`);
     res.set("Cache-Control", "no-store");
     res.send(previewBuffer);
 }));
 
-router.post("/tools/aj-print-layout-pro/export", rawUploadParser, asyncHandler(async function (req, res) {
-    const multipart = parseMultipartRequest(req);
-    const settings = normalizePrintLayoutSettings(parseSettings(multipart.fields && multipart.fields.settings));
-    const format = cleanText(multipart.fields && multipart.fields.format).toLowerCase() === "jpg" ? "jpg" : "pdf";
-    const activeSide = cleanText(multipart.fields && multipart.fields.activeSide).toLowerCase() === "back" ? "back" : "front";
-    const frontFile = multipart.files && (multipart.files.frontFile || multipart.files.front);
-    const backFile = multipart.files && (multipart.files.backFile || multipart.files.back);
+router.post("/tools/aj-print-layout-pro/export", upload.any(), asyncHandler(async function (req, res) {
+    const settings = normalizePrintLayoutSettings(parseSettings(req.body && req.body.settings));
+    const format = cleanText(req.body && req.body.format).toLowerCase() === "jpg" ? "jpg" : "pdf";
+    const activeSide = cleanText(req.body && req.body.activeSide).toLowerCase() === "back" ? "back" : "front";
+    const frontFile = getUploadedFile(req.files, ["frontFile", "front"]);
+    const backFile = getUploadedFile(req.files, ["backFile", "back"]);
     const frontBuffer = getRenderableFileBuffer(frontFile);
     const backBuffer = getRenderableFileBuffer(backFile);
 
@@ -70,28 +68,16 @@ router.post("/tools/aj-print-layout-pro/export", rawUploadParser, asyncHandler(a
 
     const frontSheetBuffer = await createBusinessCardSheetBuffer(frontBuffer || backBuffer, settings, sheetDimensions);
     const backSheetBuffer = await createBusinessCardSheetBuffer(backBuffer || frontBuffer, settings, sheetDimensions);
-    const pdfBuffer = buildSimpleJpegPdf(
-        [
-            await toJpegPage(frontSheetBuffer),
-            await toJpegPage(backSheetBuffer)
-        ],
-        sheetDimensions
-    );
+    const pdfBuffer = await buildLayoutPdfBuffer([
+        { jpegBuffer: frontSheetBuffer },
+        { jpegBuffer: backSheetBuffer }
+    ], sheetDimensions);
 
     res.set("Content-Type", "application/pdf");
     res.set("Content-Disposition", `attachment; filename="${buildExportFileName(settings, "pdf")}"`);
     res.set("Cache-Control", "no-store");
     res.send(pdfBuffer);
 }));
-
-async function toJpegPage(buffer) {
-    const metadata = await sharp(buffer).metadata();
-    return {
-        jpegBuffer: buffer,
-        imageWidth: Number(metadata.width) || 1,
-        imageHeight: Number(metadata.height) || 1
-    };
-}
 
 function parseSettings(rawSettings) {
     const text = cleanText(rawSettings);
@@ -109,6 +95,22 @@ function getRenderableFileBuffer(file) {
         return null;
     }
     return file.buffer;
+}
+
+function getUploadedFile(files, fieldNames) {
+    const list = Array.isArray(files) ? files : [];
+
+    for (let i = 0; i < fieldNames.length; i += 1) {
+        const fieldName = fieldNames[i];
+        const match = list.find(function (file) {
+            return file && file.fieldname === fieldName;
+        });
+        if (match) {
+            return match;
+        }
+    }
+
+    return null;
 }
 
 function isSupportedPreviewFile(fileName) {

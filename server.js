@@ -1,7 +1,7 @@
 const cors = require("cors");
 const express = require("express");
 
-const { cleanText, config } = require("./config");
+const { config } = require("./config");
 const { errorHandler, notFoundHandler } = require("./utils/http");
 const printLayoutRoutes = require("./routes/printLayout");
 
