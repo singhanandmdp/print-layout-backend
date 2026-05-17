@@ -1,0 +1,16 @@
+{
+  "name": "ajartivo-print-layout-backend",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Standalone print layout backend for AJ Print Layout Pro",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "sharp": "^0.34.5"
+  }
+}
