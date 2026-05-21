@@ -4,8 +4,11 @@ const config = {
     port: normalizePort(process.env.PORT, DEFAULT_PORT),
     frontendOrigins: buildFrontendOrigins(process.env.FRONTEND_ORIGINS),
     uploads: {
-        maxFileSizeBytes: normalizePositiveNumber(process.env.UPLOAD_MAX_FILE_SIZE_MB, 80) * 1024 * 1024,
-        maxPreviewSizeBytes: normalizePositiveNumber(process.env.UPLOAD_MAX_PREVIEW_SIZE_MB, 12) * 1024 * 1024
+        maxExportFileSizeBytes: normalizePositiveNumber(process.env.UPLOAD_MAX_FILE_SIZE_MB, 25) * 1024 * 1024,
+        maxPreviewFileSizeBytes: normalizePositiveNumber(process.env.UPLOAD_MAX_PREVIEW_SIZE_MB, 12) * 1024 * 1024
+    },
+    exports: {
+        timeoutMs: normalizePositiveNumber(process.env.EXPORT_TIMEOUT_MS, 45000)
     }
 };
 
