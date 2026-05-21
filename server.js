@@ -1,6 +1,14 @@
 const app = require("./app");
 const { config } = require("./config");
 
+// Root Route
+app.get("/", (req, res) => {
+    res.json({
+        success: true,
+        message: "AJ Layout Backend Running Successfully"
+    });
+});
+
 if (require.main === module) {
     app.listen(config.port, function () {
         console.log(`[AJartivo Print Layout Backend] running on http://localhost:${config.port}`);
