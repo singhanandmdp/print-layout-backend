@@ -8,6 +8,7 @@ const {
     buildLayoutPdfBuffer,
     createBusinessCardPreviewBuffer,
     createBusinessCardSheetBuffer,
+    createLayoutPageBuffers,
     getSheetDimensions,
     normalizePrintLayoutSettings
 } = require("../services/printLayoutRenderer");
@@ -73,24 +74,31 @@ router.post("/tools/aj-print-layout-pro/export", requestTimeoutMiddleware, expor
     const format = cleanText(req.body && req.body.format).toLowerCase() === "jpg" ? "jpg" : "pdf";
     const activeSide = cleanText(req.body && req.body.activeSide).toLowerCase() === "back" ? "back" : "front";
     const sheetDimensions = getSheetDimensions(settings);
-    const renderedPages = getRenderedPreviewPages(req.files);
-
-    if (renderedPages.length) {
-        await respondWithRenderedPages(req, res, renderedPages, settings, format, activeSide, sheetDimensions);
-        return;
-    }
 
     const frontFile = getUploadedFile(req.files, ["frontFile", "front", "file"]);
     const backFile = getUploadedFile(req.files, ["backFile", "back"]);
     const frontBuffer = getRenderableFileBuffer(frontFile);
     const backBuffer = getRenderableFileBuffer(backFile);
 
-    if (!frontBuffer && !backBuffer) {
-        throw createHttpError(400, "At least one rendered file is required.");
+    const renderedPages = await createLayoutPageBuffers({
+        front: frontBuffer,
+        back: backBuffer
+    }, settings);
+
+    if (renderedPages.length) {
+        await respondWithRenderedPages(req, res, renderedPages, settings, format, activeSide, sheetDimensions);
+        return;
     }
 
-    if (settings.toolId !== "business-card") {
-        throw createHttpError(400, "Backend export currently supports Business Card mode only.");
+    const legacyRenderedPages = getRenderedPreviewPages(req.files);
+
+    if (legacyRenderedPages.length) {
+        await respondWithRenderedPages(req, res, legacyRenderedPages, settings, format, activeSide, sheetDimensions);
+        return;
+    }
+
+    if (!frontBuffer && !backBuffer) {
+        throw createHttpError(400, "At least one uploaded file is required.");
     }
 
     await resExport(req, res, {
