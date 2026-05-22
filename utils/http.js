@@ -1,4 +1,7 @@
-const { cleanText } = require("../config");
+const { cleanText, config } = require("../config");
+const { createLogger } = require("./logger");
+
+const httpLogger = createLogger("http");
 
 function createHttpError(status, message, meta) {
     const error = new Error(message);
@@ -24,15 +27,39 @@ function errorHandler(error, _req, res, _next) {
     const resolvedStatus = status >= 400 && status < 600 ? status : 500;
     const message = cleanText(error && error.message) || "Server request failed.";
 
+    httpLogger.error("Request failed", {
+        status: resolvedStatus,
+        message: message,
+        meta: error && error.meta ? error.meta : undefined,
+        stack: error && error.stack ? error.stack.split("\n").slice(0, 4).join(" | ") : undefined
+    });
+
     res.status(resolvedStatus).json({
         error: message,
         meta: error && error.meta ? error.meta : undefined
     });
 }
 
+function applyRequestTimeout(req, res) {
+    const timeoutMs = Math.max(1000, Number(config.exports && config.exports.timeoutMs) || 45000);
+    if (typeof req.setTimeout === "function") {
+        req.setTimeout(timeoutMs);
+    }
+    if (typeof res.setTimeout === "function") {
+        res.setTimeout(timeoutMs);
+    }
+}
+
+function requestTimeoutMiddleware(req, res, next) {
+    applyRequestTimeout(req, res);
+    next();
+}
+
 module.exports = {
     asyncHandler,
+    applyRequestTimeout,
     createHttpError,
     errorHandler,
-    notFoundHandler
+    notFoundHandler,
+    requestTimeoutMiddleware
 };

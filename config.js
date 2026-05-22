@@ -5,7 +5,11 @@ const config = {
     frontendOrigins: buildFrontendOrigins(process.env.FRONTEND_ORIGINS),
     uploads: {
         maxExportFileSizeBytes: normalizePositiveNumber(process.env.UPLOAD_MAX_FILE_SIZE_MB, 25) * 1024 * 1024,
-        maxPreviewFileSizeBytes: normalizePositiveNumber(process.env.UPLOAD_MAX_PREVIEW_SIZE_MB, 12) * 1024 * 1024
+        maxExportFileCount: normalizePositiveNumber(process.env.UPLOAD_MAX_EXPORT_FILE_COUNT, 8),
+        maxExportPartCount: normalizePositiveNumber(process.env.UPLOAD_MAX_EXPORT_PART_COUNT, 24),
+        maxPreviewFileSizeBytes: normalizePositiveNumber(process.env.UPLOAD_MAX_PREVIEW_SIZE_MB, 12) * 1024 * 1024,
+        maxPreviewFileCount: normalizePositiveNumber(process.env.UPLOAD_MAX_PREVIEW_FILE_COUNT, 1),
+        maxPreviewPartCount: normalizePositiveNumber(process.env.UPLOAD_MAX_PREVIEW_PART_COUNT, 4)
     },
     exports: {
         timeoutMs: normalizePositiveNumber(process.env.EXPORT_TIMEOUT_MS, 45000)

@@ -5,6 +5,7 @@ const { PDFDocument } = require("pdf-lib");
 
 const { cleanText } = require("../config");
 const { createHttpError } = require("../utils/http");
+const { normalizeFieldKey } = require("../utils/validation");
 
 const EXPORT_DPI = 300;
 const PREVIEW_MAX_SIDE_PX = 2400;
@@ -304,6 +305,10 @@ function normalizeLayoutSources(rawSources) {
         }
 
         normalized[key] = {
+            fieldName: cleanText(entry.fieldName) || cleanText(entry.fileField) || cleanText(key),
+            fileField: cleanText(entry.fileField) || cleanText(entry.fieldName) || cleanText(key),
+            sourceKey: cleanText(entry.sourceKey) || key,
+            imageKey: cleanText(entry.imageKey) || key,
             side: normalizeSide(entry.side || key),
             name: cleanText(entry.name) || cleanText(entry.fileName) || key,
             fileName: cleanText(entry.fileName) || cleanText(entry.name) || key,
@@ -373,6 +378,7 @@ async function createLayoutPageBuffers(sourceBuffers, settings) {
         if (buffer) {
             renderedPages.push({
                 side: normalizeSide(page.side || settings.activeSide),
+                sheet: normalizeSheetSpec(page.sheet || settings.sheet || getSheetDimensions(settings), settings),
                 buffer: buffer
             });
         }
@@ -467,12 +473,12 @@ async function createLayoutPageBuffer(sourceBuffers, page, settings) {
 
 function resolveLayoutSourceBuffer(sourceBuffers, item, page) {
     const sources = sourceBuffers && typeof sourceBuffers === "object" ? sourceBuffers : {};
-    const primaryKey = cleanText(item && (item.imageKey || item.sourceKey || page.sourceKey || page.side || "front")) || "front";
-    const fallbacks = [primaryKey, "front", "back"];
+    const primaryKey = normalizeFieldKey(item && (item.imageKey || item.sourceKey || page.sourceKey || page.side || "front")) || "front";
+    const fallbacks = [primaryKey, normalizeFieldKey("front"), normalizeFieldKey("back")];
 
     for (let i = 0; i < fallbacks.length; i += 1) {
         const key = fallbacks[i];
-        const buffer = sources[key];
+        const buffer = sources[key] || sources[cleanText(key)] || sources[normalizeFieldKey(key)];
         if (Buffer.isBuffer(buffer) && buffer.length) {
             return { key: key, buffer: buffer };
         }
@@ -648,17 +654,33 @@ async function buildLayoutPdfBuffer(pages, dimensions) {
     pdfDoc.setCreator("AJartivo Print Layout Backend");
     pdfDoc.setSubject("Print layout export");
 
-    const widthIn = Number(dimensions && dimensions.width) || 1;
-    const heightIn = Number(dimensions && dimensions.height) || 1;
-    const width = Math.max(1, widthIn * 72);
-    const height = Math.max(1, heightIn * 72);
-
     for (let i = 0; i < pages.length; i += 1) {
         const page = pages[i];
         if (!page || !Buffer.isBuffer(page.jpegBuffer) || !page.jpegBuffer.length) {
             continue;
         }
 
+        const sheet = normalizeSheetSpec(page.sheet || page.dimensions || dimensions || getSheetDimensions({ sheet: dimensions || {} }), {
+            sheetSize: "12x18",
+            orientation: "landscape",
+            customWidth: Number(dimensions && dimensions.width) || 12,
+            customHeight: Number(dimensions && dimensions.height) || 18,
+            activeSide: "front",
+            previewBackgroundMode: "white",
+            previewBackgroundColor: "#ffffff",
+            businessCardWidth: 2.15,
+            businessCardHeight: 3.3,
+            businessGapX: 0.25,
+            businessGapY: 0.313,
+            businessBorderMargin: 0.125,
+            businessCardRotation: 0,
+            businessFitToCard: false,
+            businessCutMarks: true,
+            businessCutLeft: 2.402,
+            businessCutTop: 3.585
+        });
+        const width = Math.max(1, Number(sheet.width) || 1) * 72;
+        const height = Math.max(1, Number(sheet.height) || 1) * 72;
         const embedded = await pdfDoc.embedJpg(page.jpegBuffer);
         const pdfPage = pdfDoc.addPage([width, height]);
         pdfPage.drawImage(embedded, {
