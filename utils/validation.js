@@ -3,6 +3,8 @@ const { createHttpError } = require("./http");
 
 const IMAGE_MIME_PATTERN = /^image\/(png|jpe?g|webp|avif|gif|bmp|heic|heif|tiff?)$/i;
 const IMAGE_FILE_PATTERN = /\.(png|jpe?g|webp|avif|gif|bmp|heic|heif|tiff?|tif)$/i;
+const EXPORT_MIME_PATTERN = /^(image\/(png|jpe?g|webp|avif|gif|bmp|heic|heif|tiff?)|application\/pdf)$/i;
+const EXPORT_FILE_PATTERN = /\.(png|jpe?g|webp|avif|gif|bmp|heic|heif|tiff?|tif|pdf)$/i;
 
 function parseJsonPayload(rawValue, message) {
     const text = cleanText(rawValue);
@@ -105,6 +107,18 @@ function isSupportedImageFile(file) {
     return IMAGE_FILE_PATTERN.test(cleanText(file.originalname));
 }
 
+function isSupportedExportFile(file) {
+    if (!file || typeof file !== "object") {
+        return false;
+    }
+
+    if (EXPORT_MIME_PATTERN.test(cleanText(file.mimetype))) {
+        return true;
+    }
+
+    return EXPORT_FILE_PATTERN.test(cleanText(file.originalname));
+}
+
 function getFileBuffer(file) {
     if (!file || !Buffer.isBuffer(file.buffer) || !file.buffer.length) {
         return null;
@@ -142,6 +156,7 @@ module.exports = {
     getFirstUploadedFile,
     groupFilesByField,
     isSupportedImageFile,
+    isSupportedExportFile,
     isSupportedImageMimeType,
     normalizeFieldKey,
     parseJsonPayload

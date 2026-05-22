@@ -174,6 +174,7 @@ LOG_LEVEL=info
 - PDF export embeds rendered JPG pages.
 - Mixed-size pages are supported by the PDF pipeline.
 - Multipart parsing is bounded with file-count and part-count limits.
+- Export accepts image originals and PDF originals; preview stays local in the browser.
 
 ## Production notes
 

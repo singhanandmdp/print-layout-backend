@@ -4,7 +4,7 @@ const multer = require("multer");
 const { cleanText, config } = require("../config");
 const { asyncHandler, createHttpError, requestTimeoutMiddleware } = require("../utils/http");
 const { createLogger, createTimer } = require("../utils/logger");
-const { describeUploadedFiles, isSupportedImageFile, parseJsonPayload } = require("../utils/validation");
+const { describeUploadedFiles, isSupportedExportFile, parseJsonPayload } = require("../utils/validation");
 const { buildExportFileName, renderExportDocument } = require("../services/renderEngine");
 
 const router = express.Router();
@@ -31,8 +31,8 @@ router.post("/tools/aj-print-layout-pro/export", requestTimeoutMiddleware, expor
     }
 
     for (let i = 0; i < files.length; i += 1) {
-        if (!isSupportedImageFile(files[i])) {
-            throw createHttpError(400, `Unsupported file type for "${cleanText(files[i] && files[i].fieldname)}".`);
+        if (!isSupportedExportFile(files[i])) {
+            throw createHttpError(400, `Unsupported file type for "${cleanText(files[i] && files[i].fieldname)}". Export accepts JPG, PNG, WEBP, AVIF, GIF, BMP, HEIC, HEIF, TIFF, and PDF files.`);
         }
     }
 
